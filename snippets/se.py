@@ -71,14 +71,133 @@ class SnippetSerializer(serializers.Serializer):
 
 
 #Django shell에 들어가봐
+#python manage.py shell
+
+from snippets.models import Snippet
+from snippets.serializers import SnippetSerializer
+from rest_framework.renderers import JSONRenderer
+from rest_framework.parsers import JSONParser
+
+snippet = Snippet(code='foo = "bar"\n')
+snippet.save()
+
+snippet = Snippet(code='print("hello, world")\n')
+snippet.save()
+
+serializer = SnippetSerializer(snippet)
+serializer.data
+# {'id': 2, 'title': '', 'code': 'print("hello, world")\n', 
+#'linenos': False, 'language': 'python', 
+#'style': 'friendly'}
+#이렇게 하면 python native datatype으로 바꿨다.
+#serialization process을 끝마치기 위해 data을 json으로 하자.
+
+content = JSONRenderer().render(serializer.data)
+content
+# b'{"id": 2, "title": "", "code": "print(\\"hello, world\\")\\n", "linenos": false, "language": "python", "style": "friendly"}'
+
+#Deserialzaation도 비슷한데. parse을 해서 python native datatype으로 해주자.
+import io
+stream = io.BytesIO(content)
+data = JSONParser().parse(stream)
+
+# python native datatype => object instance
+serializer = SnippetSerializer(data=data)
+serializer.is_valid() # true
+serializer.validated_data
+serializer.save()
+# <Snippet: Snippet object>
+serializer = SnippetSerializer(Snippet.objects.all(), many=True)
+serializer.data
+# [OrderedDict([('id', 1), ('title', ''), ('code', 'foo = "bar"\n'), ('linenos', False), ('language', 'python'), ('style', 'friendly')]), OrderedDict([('id', 2), ('title', ''), ('code', 'print("hello, world")\n'), ('linenos', False), ('language', 'python'), ('style', 'friendly')]), OrderedDict([('id', 3), ('title', ''), ('code', 'print("hello, world")'), ('linenos', False), ('language', 'python'), ('style', 'friendly')])]
 
 
+#Using ModelSerializers
+#좀더 간결하게
+
+#snippets/serializers.py 을 이걸로 바꿔
+class SnippetSerializer(serializers.Modelerializer):
+    class Meta:
+        model = Snippet
+        fields = ['id', 'title', 'code', 'linenos', 'language', 'style']
 
 
+from snippets.serializers import SnippetSerializer
+serializer = SnippetSerializer()
+print(repr(serializer))
 
+#Writing regular Django views using our Serializer
+#new serializer class을 이용해서 api을 만들어보자.
 
+#snippets/views.py
+from django.http import HttpResponse, JsonResponse
+from django.views.decorators.csrf import csrf_exempt
+from rest_framework.parsers import JSONParser
+from snippets.models import Snippet
+from snippets.serializers import SnippetSerializer
 
+#Api는 스니펫리스트들을 보여주는 뷰일거야.
 
+@csrf_exempt
+def snippet_list(request):
+    """
+    List all code snippets, or create a new snippet.
+    """
+    if request.method === 'GET':
+        snippets = Snippet.objects.all()
+        serializer = SnippetSerializer(snippets, many=True)
+        return JsonResponse(serialzer.data, safe=False)
+
+    elif request.method === 'POST':
+        data = JSONParser().parse(request)
+        serializer = SnippetSerializer(data=data)
+        if serializer.is_valid():
+            serializer.save()
+            return JsonResponse(serializer.data, status=201)
+        return JsonResponse(serializer.errors, status=400)
+
+@csrf_exempt
+def snippet_detail(request, pk):
+    """
+    Retrieve, update or delete a code snippet.
+    """
+    try:
+        snippet = Snippet.objects.get(pk=pk)
+    except Snippet.DoesNotExist:
+        return HttpResponse(status=404)
+
+    if request.method == 'GET':
+        serializer = SnippetSerializer(snippet)
+        return JsonResponse(serializer.data)
+
+    elif request.method == 'PUT':
+        data = JSONParser().parse(request)
+        serializer = SnippetSerializer(snippet, data=data)
+        if serializer.is_valid():
+            serializer.save()
+            return JsonResponse(serializer.data)
+        return JsonResponse(serializer.errors, status=400)
+
+    elif request.method == 'DELETE':
+        snippet.delete()
+        return HttpResponse(status=204)
+
+#snippets/urls.py
+from django.urls import path
+from snippets import views
+
+urlpatterns = [
+    path('snippets/', views.snippet_list),
+    path('snippets/<int:pk>/', views.snippet_detail),
+]
+
+#tutorial/urls.py
+
+from django.urls import path, include
+
+urlpatterns = [
+    path('', include('snippets.urls')),
+]
 
 
 
