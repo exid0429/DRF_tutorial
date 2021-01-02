@@ -199,16 +199,6 @@ urlpatterns = [
     path('', include('snippets.urls')),
 ]
 
-
-
-
-
-
-
-
-
-
-
 from datatime import datatime
 
 class Comment(object):
@@ -236,3 +226,94 @@ serializer.data
 #json type
 
 #data을 json 타입으로 변환
+
+
+#Chapter2
+#Request objects
+#Request 객체는 HttpRequest을 확장하여 좀더 유연하게 요청을 파싱한다.
+
+request.POST #Form 데이터만 다루고, 오로지 POST 메서드에서만 사용이 가능함
+request.data #아무 데이터나 다룰수 있다. POST, PUT, PATCH
+
+return Response(data) # 클라가 원하는 형태로 컨텐츠를 렌더링한다.
+
+#status codes : drf에서는 숫자로 된 식별자보단 문자 형태의 식별자를 사용한다.
+#Wrapping API views : DRF에서는 Api view을 쓰는데 2가지 wrapper을 제공한다.
+#1.CBV에서 사용할 수 있는 APIView 클래스
+#2.FBV에서 사용할 수 있는 @api_rest 데코레이터
+#이 둘은 Request에 기능을 더하거나, context을 추가해 컨텐츠가 잘 변환되도록한다.
+
+#snippets / views.py
+from rest_framework import status
+from rest_framework.decorators import api_view
+from rest_framework.response import Response
+from snippets.models import Snippet
+from snippets.serializers import SnippetSerializer
+
+@api_view(['GET', 'POST'])
+def snippet_list(request):
+    """
+    List all code snippets, or create a new snippet.
+    """
+    if request.method == 'GET':
+        snippets = Snippet.objects.all()
+        serializer = SnippetSerializer(snippets, many=True)
+        return Response(serializer.data)
+
+    elif request.method == 'POST':
+        serializer = SnippetSerializer(data=request.data)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+#개별 데이터를 담당하는 view을 수정해보면
+
+@api_view(['GET', 'PUT', 'DELETE'])
+def snippet_detail(request, pk):
+    """
+    Retrieve, update or delete a code snippet.
+    """
+    try:
+        snippet = Snippet.objects.get(pk=pk)
+    except Snippet.DoesNotExist:
+        return Response(status=status.HTTP_404_NOT_FOUND)
+
+    if request.method == 'GET':
+        serializer = SnippetSerializer(snippet)
+        return Response(serializer.data)
+
+    elif request.method == 'PUT':
+        serializer = SnippetSerializer(snippet, data=request.data)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    elif request.method == 'DELETE':
+        snippet.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+#request.data는 json 을 포함하여 다양한 형식을 다를 수 있다. 응답 객체 또한 원하는 형태로 렌더링이 가능
+
+#Adding optional format suffixes to our URLS
+#여러 형태를 제공할 수 있는 Response 객체의 장점을 이용하기 위해, API에서 여러형태를제공해야한다.
+
+localhost:8000/api/items/4.json
+#우선 형태를 다루기 위해 format 키워드를 views.py에 넣어주자.
+def snippet_list(reuqest, format = None): #format은 정해진게 없기때문에 디폴트 값은 None
+def snippet_detail(request, pk, format=None): #detail은 pk가 필요하다잉
+
+#urls.py에 format_suffix_patterns라는 패턴을 추가로 등록
+#snippets/urls.py
+
+from django.conf.urls import url
+from rest_framework.urlpatterns import format_suffix_patterns
+from snippets import views
+
+urlpatterns = [
+    url(r'^snippets/$', views.snippet_list),
+    url(r'^snippets/(?P<pk>[0-9]+)$', views.snippet_detail),
+]
+
+urlpatterns = format_suffix_patterns(urlpatterns)
